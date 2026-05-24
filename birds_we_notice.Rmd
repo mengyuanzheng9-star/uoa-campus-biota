@@ -276,7 +276,7 @@ kbl(overview, caption = "Table 1. Dataset overview — Biota of UoA City Campus 
 
 ## Most Frequently Recorded Species
 
-```{r top-species, fig.cap="Figure 1. Most frequently recorded bird species on the UoA city campus. Native NZ species are shown in teal; introduced species in salmon. Species with unresolved status shown in grey."}
+```{r top-species,  fig.width=9, fig.height=8, fig.cap="Figure 1. Most frequently recorded bird species on the UoA city campus. Native NZ species are shown in teal; introduced species in salmon. Species with unresolved status shown in grey."}
 top20 <- birds |>
   count(scientific_name, common_name, native, sort = TRUE) |>
   slice_head(n = 20) |>
@@ -619,7 +619,7 @@ tidy_final |>
 
 ## Model Diagnostics
 
-```{r dharma-diagnostics, fig.cap="Figure 9. DHARMa residual diagnostics. (A) QQ-plot of scaled residuals; (B) residuals vs fitted values. A well-fitting model shows uniform residuals (left) and no trend (right)."}
+```{r dharma-diagnostics, fig.width=10, fig.height=5, fig.cap="Figure 9. DHARMa residual diagnostics. (A) QQ-plot of scaled residuals; (B) residuals vs fitted values. A well-fitting model shows uniform residuals (left) and no trend (right)."}
 sim_res <- simulateResiduals(fittedModel = m_final, n = 500, plot = FALSE)
 
 par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
