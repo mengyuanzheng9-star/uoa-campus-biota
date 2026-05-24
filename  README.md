@@ -8,10 +8,11 @@ science data (2016–2026).
 
 - `birds_we_notice.Rmd` — main analysis file (data wrangling, 
   visualisation, Poisson GLM modelling)
-- `Significance article brief summary.r` — summary script
 - `observations-719197.csv` — raw iNaturalist export (research-grade 
   Aves records, exported 27 April 2026)
-- `significance_article.md` — Significance-style article
+- `significance_article.Rmd` — Significance-style article (knit to produce significance_article.html)
+- `figure1.png` — Species frequency plot
+- `figure2.png` — GLM coefficient plot
 
 ## How to reproduce the analysis
 
