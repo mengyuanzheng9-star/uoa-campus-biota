@@ -1,6 +1,6 @@
 ---
 title: "The Birds We Notice: Avian Biodiversity and Observer Behaviour on the University of Auckland City Campus"
-author: "BIOSCI 738"
+author: "Mengyuan Zheng"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -28,8 +28,7 @@ knitr::opts_chunk$set(
 
 ---
 
-> **GitHub Repository:** [https://github.com/YOUR_USERNAME/birds-we-notice](https://github.com/YOUR_USERNAME/birds-we-notice)  
-> *(Replace with your actual repository URL before submission)*
+> **GitHub Repository:** [https://github.com/mengyuanzheng9-star/uoa-campus-biota](https://github.com/mengyuanzheng9-star/uoa-campus-biota)
 
 ---
 
@@ -740,7 +739,7 @@ The birds of the University of Auckland's city campus are shaped by two worlds: 
 
 As the iNaturalist project continues to accumulate records, future analyses can address whether the native:introduced ratio is shifting, whether particular species are expanding or contracting their campus presence, and whether observer effort can be standardised through structured survey protocols. For now, the data confirm that even a small urban campus in the heart of Tāmaki Makaurau harbours a genuinely diverse avifauna — if you take the time to look.
 
-The code and data supporting this analysis are available at [https://github.com/YOUR_USERNAME/birds-we-notice](https://github.com/YOUR_USERNAME/birds-we-notice).
+The code and data supporting this analysis are available at [https://github.com/mengyuanzheng9-star/uoa-campus-biota](https://github.com/mengyuanzheng9-star/uoa-campus-biota).
 
 ---
 
@@ -767,8 +766,6 @@ Claude (Anthropic, claude-sonnet-4-6) was used to assist in generating the initi
 # References
 
 Isaac, N.J.B., van Strien, A.J., August, T.A., de Zeeuw, M.P. & Roy, D.B. (2014). Statistics for citizen science: extracting signals of change from noisy ecological data. *Methods in Ecology and Evolution*, 5, 1052–1060.
-
-MacKenzie, D.I., Nichols, J.D., Lachman, G.B., Droege, S., Royle, J.A. & Langtimm, C.A. (2002). Estimating site occupancy rates when detection probabilities are less than one. *Ecology*, 83, 2248–2255.
 
 iNaturalist (2026). Biota of University of Auckland City Campus. Available at: https://www.inaturalist.org/projects/biota-of-university-of-auckland-city-campus. Accessed 27 April 2026.
 
