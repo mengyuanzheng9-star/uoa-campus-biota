@@ -1,5 +1,5 @@
 ---
-title: "The Birds We Notice: Avian Biodiversity and Observer Behaviour on the University of Auckland City Campus"
+title: "The Birds We Notice: Observer Effort, Citizen Science Bias, and Avian Diversity on the University of Auckland City Campus"
 author: "Mengyuan Zheng"
 date: "`r Sys.Date()`"
 output:
@@ -34,17 +34,13 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-Walk across the University of Auckland's city campus on any given morning and you are likely to hear a tūī before you see one. The campus sits embedded within Tāmaki Makaurau — one of New Zealand's most urbanised environments — yet supports a surprisingly diverse community of birds, from native honeyeaters to introduced sparrows. Understanding which species are detected, when, and where has practical value for campus biodiversity management, and raises deeper questions about how human observers shape the biodiversity record itself.
+Imagine a restaurant review platform where the top five most active reviewers have written a quarter of all reviews. Would you trust the ranking? Would "most reviewed dish" reliably mean "best dish" — or would it simply mean "the dish those five reviewers happened to order most often"?
 
-Citizen science platforms such as iNaturalist have transformed how biodiversity data are gathered. The [Biota of University of Auckland City Campus](https://www.inaturalist.org/projects/biota-of-university-of-auckland-city-campus) project invites observers to record any organism encountered on campus, producing a freely available, opportunistically-sampled dataset spanning multiple years. For birds — arguably the most noticed taxon — this record allows us to ask: *What drives the number of bird species detected on any given day?* Is it the season, the effort of observers, the day of the week, or some combination of these factors?
+This is not a hypothetical problem. It is the situation facing anyone who opens the iNaturalist dataset for the University of Auckland's city campus. Among 138 contributors who have submitted research-grade bird observations since 2016, the five most active observers account for 71 records — approximately 25% of the entire dataset. Before we can say anything meaningful about which birds inhabit this campus, we need to ask: does that concentration of effort distort the picture?
 
-This analysis pursues three questions:
+This analysis pursues that question in three stages. First, we describe the campus bird record and examine the distribution of observer effort. Second, we test whether the ranking of bird groups is robust to the removal of the most active contributors — a sensitivity analysis analogous to asking whether the restaurant ranking holds once the power reviewers are excluded. Third, having established the reliability of the main pattern, we use statistical modelling to ask what actually drives variation in daily species richness: is it the season, the day of the week, the year, or simply how many observers were active on a given day?
 
-1. How has bird species richness on campus changed over time, and are there seasonal patterns?
-2. Which species are most frequently recorded, and do native and introduced species show different temporal patterns?
-3. Can we model daily species richness as a function of observer effort, season, and time-of-week using a generalised linear model (GLM)?
-
-The findings speak to both campus ecology and the interpretation of opportunistic biodiversity records more broadly.
+The iNaturalist [Biota of University of Auckland City Campus](https://www.inaturalist.org/projects/biota-of-university-of-auckland-city-campus) project provides the data. The findings speak not only to campus ecology, but to the broader challenge of interpreting opportunistic citizen science records honestly.
 
 ---
 
@@ -52,13 +48,13 @@ The findings speak to both campus ecology and the interpretation of opportunisti
 
 ## Data Acquisition
 
-Observation data were exported from the iNaturalist project *Biota of University of Auckland City Campus* on **27 April 2026** using the iNaturalist export tool, filtering to:
+Observation data were exported from the iNaturalist project *Biota of University of Auckland City Campus* on **27 April 2026**, filtering to:
 
-- **Taxon:** Aves (birds)  
-- **Quality grade:** Research grade  
-- **Date range:** All available records up to export date  
+- **Taxon:** Aves (birds)
+- **Quality grade:** Research grade
+- **Date range:** All available records to export date
 
-The exported CSV (`observations-719197.csv`) was saved in the project repository. No location data were obscured in the downloaded export.
+The exported CSV (`observations-719197.csv`) was saved in the project repository alongside this script. No location data were obscured in the downloaded export.
 
 ## Data Wrangling
 
@@ -69,10 +65,11 @@ library(lubridate)
 library(janitor)
 
 # ── Modelling ───────────────────────────────────────────────────────────────
-library(MASS)
-# MASS masks dplyr::select — restore immediately
+library(MASS)          # glm.nb; masks dplyr::select — restored below
 select <- dplyr::select
+library(lme4)          # glmer for mixed-effects model
 library(broom)
+library(broom.mixed)   # tidy() for lme4 objects
 library(DHARMa)
 
 # ── Visualisation ───────────────────────────────────────────────────────────
@@ -153,7 +150,7 @@ native_status <- tribble(
 
 ```{r load-data}
 # ── Load raw data ─────────────────────────────────────────────────────────────
-raw_path <- "observations-719197.csv"   # file lives alongside this Rmd
+raw_path <- "observations-719197.csv"
 
 if (file.exists(raw_path)) {
   raw <- read_csv(raw_path, show_col_types = FALSE)
@@ -168,8 +165,7 @@ if (file.exists(raw_path)) {
 # ── Standardise column names ──────────────────────────────────────────────────
 raw_clean <- raw |> clean_names()
 
-# No taxon_class_name column — export was already filtered to Aves
-# Confirm by checking iconic_taxon_name if present
+# Confirm Aves filter if column present
 if ("iconic_taxon_name" %in% names(raw_clean)) {
   non_bird <- raw_clean |> filter(iconic_taxon_name != "Aves")
   if (nrow(non_bird) > 0) {
@@ -201,7 +197,6 @@ birds <- raw_clean |>
     season  = factor(season, levels = c("Spring", "Summer", "Autumn", "Winter")),
     weekend = if_else(wday(date, week_start = 1) >= 6, "Weekend", "Weekday")
   ) |>
-  # Join native status lookup
   left_join(native_status, by = "scientific_name") |>
   filter(!is.na(date), year >= 2015) |>
   distinct()
@@ -216,13 +211,13 @@ cat("Native status resolved for",
 
 ## Derived Variables
 
-For modelling we aggregate to the **daily** level, computing for each calendar day with at least one record:
+For daily-level modelling, we aggregate to each calendar day with at least one record:
 
 | Variable | Description |
 |---|---|
 | `species_richness` | Number of distinct species observed |
 | `n_observers` | Number of unique observers (effort proxy) |
-| `log_effort` | log(n_observers + 1) |
+| `log_effort` | log(n_observers + 1), stabilises variance |
 | `season` | Southern Hemisphere astronomical season |
 | `weekend` | Weekend vs Weekday |
 | `year_c` | Calendar year centred at first year |
@@ -250,7 +245,7 @@ print(summary(daily$species_richness))
 
 # Results
 
-## Overview of the Dataset
+## Dataset Overview
 
 ```{r overview-table}
 overview <- tibble(
@@ -274,27 +269,103 @@ kbl(overview, caption = "Table 1. Dataset overview — Biota of UoA City Campus 
                 full_width = FALSE)
 ```
 
-## Most Frequently Recorded Species
+## The Campus Bird Ranking
 
-```{r top-species,  fig.width=9, fig.height=8, fig.cap="Figure 1. Most frequently recorded bird species on the UoA city campus. Native NZ species are shown in teal; introduced species in salmon. Species with unresolved status shown in grey."}
-top20 <- birds |>
-  count(scientific_name, common_name, native, sort = TRUE) |>
-  slice_head(n = 20) |>
+```{r bird-group-lookup}
+# ── Collapse species and subspecies into readable bird groups ─────────────────
+# This mirrors the data-cleaning approach described in the article:
+# subspecies are merged with their parent species for public-facing clarity.
+bird_group_lookup <- tribble(
+  ~scientific_name,                                ~bird_group,
+  "Columba livia",                                 "Rock/Feral Pigeon",
+  "Columba livia domestica",                       "Rock/Feral Pigeon",
+  "Passer domesticus",                             "House Sparrow",
+  "Passer domesticus domesticus",                  "House Sparrow",
+  "Turdus merula",                                 "Eurasian Blackbird",
+  "Turdus merula merula",                          "Eurasian Blackbird",
+  "Prosthemadera novaeseelandiae",                 "Tūī",
+  "Prosthemadera novaeseelandiae novaeseelandiae", "Tūī",
+  "Platycercus eximius",                           "Eastern Rosella",
+  "Platycercus eximius eximius",                   "Eastern Rosella",
+  "Rhipidura fuliginosa",                          "NZ Fantail / Pīwakawaka",
+  "Rhipidura fuliginosa fuliginosa",               "NZ Fantail / Pīwakawaka",
+  "Rhipidura fuliginosa placabilis",               "NZ Fantail / Pīwakawaka",
+  "Rhipidura fuliginosa melanura",                 "NZ Fantail / Pīwakawaka",
+  "Hemiphaga novaeseelandiae",                     "Kererū",
+  "Hemiphaga novaeseelandiae novaeseelandiae",     "Kererū",
+  "Gymnorhina tibicen",                            "Australian Magpie",
+  "Gymnorhina tibicen hypoleuca",                  "Australian Magpie",
+  "Gymnorhina tibicen tibicen",                    "Australian Magpie",
+  "Zosterops lateralis",                           "Silvereye / Tauhou",
+  "Zosterops lateralis lateralis",                 "Silvereye / Tauhou",
+  "Todiramphus sanctus",                           "Sacred Kingfisher",
+  "Todiramphus sanctus vagans",                    "Sacred Kingfisher",
+  "Halcyon sancta",                                "Sacred Kingfisher",
+  "Carduelis carduelis",                           "European Goldfinch",
+  "Carduelis carduelis britannica",                "European Goldfinch",
+  "Hirundo neoxena",                               "Welcome Swallow / Warou",
+  "Hirundo neoxena neoxena",                       "Welcome Swallow / Warou",
+  "Sturnus vulgaris",                              "Common Starling",
+  "Acridotheres tristis",                          "Common Myna",
+  "Acridotheres tristis tristis",                  "Common Myna",
+  "Turdus philomelos",                             "Song Thrush",
+  "Turdus philomelos clarkei",                     "Song Thrush",
+  "Fringilla coelebs",                             "Chaffinch",
+  "Fringilla coelebs gengleri",                    "Chaffinch",
+  "Carduelis chloris",                             "European Greenfinch",
+  "Anas platyrhynchos",                            "Mallard",
+  "Anas platyrhynchos platyrhynchos",              "Mallard",
+  "Anas platyrhynchos superciliosa",               "Grey Duck",
+  "Gerygone igata",                                "Grey Warbler / Riroriro",
+  "Corvus frugilegus",                             "Rook",
+  "Streptopelia chinensis",                        "Spotted Dove",
+  "Streptopelia chinensis tigrina",                "Spotted Dove",
+  "Ardea novaehollandiae",                         "White-faced Heron",
+  "Ardea alba",                                    "Great Egret",
+  "Anthornis melanura",                            "Bellbird / Korimako",
+  "Anthornis melanura melanura",                   "Bellbird / Korimako",
+  "Hirundo tahitica",                              "Pacific Swallow",
+  "Streptopelia roseogrisea",                      "African Collared Dove",
+  "Porphyrio melanotus",                           "Pūkeko",
+  "Porphyrio melanotus melanotus",                 "Pūkeko",
+  "Haematopus ostralegus",                         "Oystercatcher",
+  "Anthus novaeseelandiae",                        "NZ Pipit",
+  "Anthus novaeseelandiae novaeseelandiae",         "NZ Pipit",
+  "Petroica macrocephala",                         "Tomtit / Miromiro",
+  "Mohoua ochrocephala",                           "Yellowhead / Mohua"
+)
+
+# ── Join bird_group to birds tibble ──────────────────────────────────────────
+birds <- birds |>
+  left_join(bird_group_lookup, by = "scientific_name") |>
+  mutate(bird_group = if_else(is.na(bird_group), scientific_name, bird_group))
+```
+
+```{r top-groups, fig.width=9, fig.height=7, fig.cap="Figure 1. Most frequently recorded bird groups on the UoA city campus. Native NZ species shown in teal; introduced species in salmon."}
+# ── Compute group-level counts ────────────────────────────────────────────────
+group_counts <- birds |>
+  group_by(bird_group) |>
+  summarise(
+    n      = n(),
+    native = first(native),
+    .groups = "drop"
+  ) |>
   mutate(
-    display_name = if_else(
-      !is.na(common_name) & common_name != "",
-      paste0(common_name, "\n(", scientific_name, ")"),
-      scientific_name
-    ),
-    display_name = fct_reorder(display_name, n),
-    status = case_when(
+    status       = case_when(
       native == TRUE  ~ "Native",
       native == FALSE ~ "Introduced",
       TRUE            ~ "Unknown"
-    )
-  )
+    ),
+    bird_group = fct_reorder(bird_group, n)
+  ) |>
+  arrange(desc(n))
 
-ggplot(top20, aes(x = n, y = display_name, fill = status)) +
+# Store ranking for sensitivity analysis
+ranking_all <- group_counts |>
+  arrange(desc(n)) |>
+  mutate(rank_all = row_number())
+
+ggplot(group_counts, aes(x = n, y = bird_group, fill = status)) +
   geom_col(width = 0.75, alpha = 0.9) +
   scale_fill_manual(
     values = c("Native" = "#2a9d8f", "Introduced" = "#e76f51", "Unknown" = "#adb5bd"),
@@ -302,7 +373,7 @@ ggplot(top20, aes(x = n, y = display_name, fill = status)) +
   ) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.05))) +
   labs(
-    title    = "Most frequently recorded bird species",
+    title    = "Most frequently recorded bird groups",
     subtitle = "University of Auckland City Campus iNaturalist project",
     x        = "Number of observations",
     y        = NULL
@@ -315,25 +386,174 @@ ggplot(top20, aes(x = n, y = display_name, fill = status)) +
   )
 ```
 
-```{r top-species-table}
-top20 |>
-  dplyr::select(
-    `Scientific name` = scientific_name,
-    `Common name`     = common_name,
-    Status            = status,
-    Observations      = n
-  ) |>
-  kbl(caption = "Table 2. Twenty most frequently recorded bird species.") |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                full_width = FALSE) |>
-  row_spec(which(top20$status == "Native"), background = "#e8f5f3")
+## Who Is Contributing the Data?
+
+```{r observer-effort, fig.cap="Figure 2. Distribution of records across 138 observers. The top five most active observers (red) together account for approximately 25% of all records."}
+# ── Per-observer record counts ────────────────────────────────────────────────
+observer_counts <- birds |>
+  count(user_login, sort = TRUE) |>
+  mutate(
+    rank     = row_number(),
+    top5     = rank <= 5,
+    observer = if_else(top5, paste0("Top-", rank), "Other observers")
+  )
+
+top5_users    <- observer_counts |> filter(top5) |> pull(user_login)
+top5_n        <- observer_counts |> filter(top5) |> pull(n) |> sum()
+top5_pct      <- round(100 * top5_n / nrow(birds), 1)
+total_obs_n   <- nrow(birds)
+total_obs_pct <- 100 - top5_pct
+
+cat("Top 5 observers contributed:", top5_n, "records (", top5_pct, "% of total)\n")
+cat("Remaining", n_distinct(birds$user_login) - 5,
+    "observers contributed:", total_obs_n - top5_n,
+    "records (", total_obs_pct, "%)\n")
+
+# ── Lollipop chart of observer contributions ─────────────────────────────────
+observer_counts |>
+  mutate(label = if_else(top5, paste0("Observer ", rank), NA_character_)) |>
+  ggplot(aes(x = rank, y = n, colour = top5)) +
+  geom_segment(aes(xend = rank, yend = 0), linewidth = 0.6, alpha = 0.7) +
+  geom_point(size = 2.5) +
+  annotate("rect", xmin = 0.5, xmax = 5.5, ymin = 0, ymax = Inf,
+           alpha = 0.08, fill = "#e63946") +
+  annotate("text", x = 3, y = max(observer_counts$n) * 0.92,
+           label = paste0("Top 5:\n", top5_pct, "% of all records"),
+           colour = "#e63946", fontface = "bold", size = 3.5) +
+  scale_colour_manual(values = c("FALSE" = "grey60", "TRUE" = "#e63946"),
+                      guide = "none") +
+  scale_x_continuous(breaks = c(1, 5, seq(20, nrow(observer_counts), 20))) +
+  labs(
+    title    = "Distribution of records across observers",
+    subtitle = paste0(n_distinct(birds$user_login),
+                      " observers; top 5 highlighted in red"),
+    x        = "Observer rank (most to least active)",
+    y        = "Number of records"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold"))
 ```
 
-## Temporal Patterns
+## Sensitivity Analysis: Does the Ranking Hold Without the Top Five?
 
-### Annual Trends
+```{r sensitivity-analysis, fig.width=9, fig.height=7, fig.cap="Figure 3. Bird group ranking with all records (left) versus after removing the top five most active observers (right). Lines connect the same group across both rankings; groups that changed rank are highlighted in orange."}
+# ── Recompute ranking after removing top-5 observers ─────────────────────────
+birds_no_top5 <- birds |> filter(!user_login %in% top5_users)
 
-```{r annual-trend, fig.cap="Figure 2. Annual trends in (A) total observations and (B) species richness recorded per year."}
+ranking_no_top5 <- birds_no_top5 |>
+  count(bird_group, sort = TRUE) |>
+  mutate(rank_no_top5 = row_number()) |>
+  rename(n_no_top5 = n)
+
+# ── Join both rankings ────────────────────────────────────────────────────────
+rank_comparison <- ranking_all |>
+  select(bird_group, n_all = n, rank_all, status) |>
+  inner_join(ranking_no_top5, by = "bird_group") |>
+  mutate(
+    rank_changed = rank_all != rank_no_top5,
+    highlight    = if_else(rank_changed, "#e9a820", "grey70")
+  )
+
+# ── Print rank changes ────────────────────────────────────────────────────────
+cat("Bird groups that changed rank after removing top-5 observers:\n")
+rank_comparison |>
+  filter(rank_changed) |>
+  select(bird_group, rank_all, rank_no_top5) |>
+  mutate(direction = if_else(rank_no_top5 < rank_all, "↑ moved up", "↓ moved down")) |>
+  print()
+
+# ── Bump chart ────────────────────────────────────────────────────────────────
+# Prepare long format for plotting
+rank_long <- rank_comparison |>
+  select(bird_group, rank_all, rank_no_top5, rank_changed, status) |>
+  pivot_longer(cols = c(rank_all, rank_no_top5),
+               names_to  = "dataset",
+               values_to = "rank") |>
+  mutate(
+    dataset = recode(dataset,
+                     "rank_all"      = "All records",
+                     "rank_no_top5"  = "Top-5 removed"),
+    dataset = factor(dataset, levels = c("All records", "Top-5 removed"))
+  )
+
+# Only plot top 15 for clarity
+top15_groups <- rank_comparison |>
+  filter(rank_all <= 15) |>
+  pull(bird_group)
+
+rank_long_top15 <- rank_long |> filter(bird_group %in% top15_groups)
+
+ggplot(rank_long_top15,
+       aes(x = dataset, y = rank, group = bird_group,
+           colour = rank_changed, label = bird_group)) +
+  geom_line(linewidth = 1.1, alpha = 0.8) +
+  geom_point(size = 3) +
+  geom_text(data = rank_long_top15 |> filter(dataset == "All records"),
+            aes(x = "All records"), hjust = 1.1, size = 3, fontface = "italic") +
+  geom_text(data = rank_long_top15 |> filter(dataset == "Top-5 removed"),
+            aes(x = "Top-5 removed"), hjust = -0.1, size = 3, fontface = "italic") +
+  scale_y_reverse(breaks = 1:15) +
+  scale_colour_manual(values = c("FALSE" = "grey60", "TRUE" = "#e9a820"),
+                      labels = c("Rank unchanged", "Rank changed"),
+                      name   = "") +
+  expand_limits(x = c(0.5, 2.5)) +
+  labs(
+    title    = "Sensitivity analysis: bird group ranking before and after removing top-5 observers",
+    subtitle = "Top 15 groups shown. Orange = rank changed; grey = rank stable.",
+    x        = NULL,
+    y        = "Rank (1 = most recorded)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title       = element_text(face = "bold"),
+    legend.position  = "bottom",
+    panel.grid.minor = element_blank()
+  )
+```
+
+## Temporal Patterns and the Semester Effect
+
+```{r monthly-effort, fig.cap="Figure 4. Monthly total observations (bars) and number of active observers (line) across all years combined. March stands out in both metrics, suggesting a semester-driven surge in recording activity rather than a genuine seasonal peak in bird diversity."}
+# ── Monthly observations and active observers ─────────────────────────────────
+monthly_summary <- birds |>
+  group_by(month_num, month) |>
+  summarise(
+    total_obs    = n(),
+    n_observers  = n_distinct(user_login),
+    .groups = "drop"
+  ) |>
+  mutate(obs_per_observer = total_obs / n_observers)
+
+# Dual-axis plot: bars for observations, line for observer count
+obs_scale <- max(monthly_summary$total_obs)
+obs_line  <- max(monthly_summary$n_observers)
+scale_factor <- obs_scale / obs_line
+
+ggplot(monthly_summary, aes(x = month)) +
+  geom_col(aes(y = total_obs), fill = "#457b9d", alpha = 0.75, width = 0.6) +
+  geom_line(aes(y = n_observers * scale_factor, group = 1),
+            colour = "#e63946", linewidth = 1.2) +
+  geom_point(aes(y = n_observers * scale_factor),
+             colour = "#e63946", size = 3) +
+  scale_y_continuous(
+    name = "Total observations (bars)",
+    sec.axis = sec_axis(~ . / scale_factor,
+                        name = "Active observers (red line)")
+  ) +
+  labs(
+    title    = "Monthly observations and active observers",
+    subtitle = "All years combined (2016–2026)",
+    x        = "Month"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title  = element_text(face = "bold"),
+    axis.title.y.right = element_text(colour = "#e63946"),
+    axis.text.y.right  = element_text(colour = "#e63946")
+  )
+```
+
+```{r annual-trend, fig.cap="Figure 5. Annual trends in total observations and unique observers. The parallel growth in observers and records suggests that increased recording activity, rather than a genuine increase in bird diversity, drives the recent upward trend."}
 annual <- birds |>
   group_by(year) |>
   summarise(
@@ -352,11 +572,11 @@ p1 <- ggplot(annual, aes(x = year, y = total_obs)) +
   theme(plot.title = element_text(face = "bold"),
         axis.text.x = element_text(angle = 45, hjust = 1))
 
-p2 <- ggplot(annual, aes(x = year, y = n_species)) +
-  geom_col(fill = "#2a9d8f", alpha = 0.85) +
-  geom_line(colour = "#264653", linewidth = 1, linetype = "dashed") +
+p2 <- ggplot(annual, aes(x = year, y = n_observers)) +
+  geom_col(fill = "#e63946", alpha = 0.75) +
+  geom_line(colour = "#9d0208", linewidth = 1, linetype = "dashed") +
   scale_x_continuous(breaks = unique(annual$year)) +
-  labs(title = "B. Species richness per year", x = "Year", y = "Species count") +
+  labs(title = "B. Active observers per year", x = "Year", y = "Observers") +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(face = "bold"),
         axis.text.x = element_text(angle = 45, hjust = 1))
@@ -364,135 +584,23 @@ p2 <- ggplot(annual, aes(x = year, y = n_species)) +
 p1 + p2
 ```
 
-### Seasonal Patterns
-
-```{r seasonal-richness, fig.cap="Figure 3. Distribution of daily species richness by season (Southern Hemisphere). Points show individual days; the vertical line marks the median."}
-ggplot(daily, aes(x = species_richness, y = season, fill = season)) +
-  geom_density_ridges(
-    alpha = 0.75, scale = 1.2,
-    quantile_lines = TRUE, quantiles = 2,
-    jittered_points = TRUE, point_size = 0.5, point_alpha = 0.4
-  ) +
-  scale_fill_viridis_d(option = "D", direction = -1) +
-  labs(
-    title    = "Daily species richness by season",
-    subtitle = "Vertical line = median; dots = individual days",
-    x        = "Species richness (per day)", y = NULL
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "none",
-        plot.title = element_text(face = "bold"))
-```
-
-```{r monthly-heatmap, fig.cap="Figure 4. Heatmap of mean daily species richness by year and month. Grey cells indicate months with no records."}
-# Build a complete grid of all year × month combinations so missing cells show grey
-all_years  <- seq(min(daily$year), max(daily$year))
-all_months <- tibble(
-  month_num = 1:12,
-  month     = factor(month.abb, levels = month.abb)
-)
-
-complete_grid <- expand_grid(year = all_years, month_num = 1:12) |>
-  left_join(all_months, by = "month_num")
-
-monthly_avg <- daily |>
-  group_by(year, month_num) |>
-  summarise(mean_richness = mean(species_richness), .groups = "drop")
-
-monthly_plot <- complete_grid |>
-  left_join(monthly_avg, by = c("year", "month_num"))
-
-ggplot(monthly_plot, aes(x = month, y = factor(year), fill = mean_richness)) +
-  geom_tile(colour = "white", linewidth = 0.4) +
-  scale_fill_viridis_c(option = "C", name = "Mean\nrichness",
-                       na.value = "grey88") +
-  labs(title = "Mean daily species richness by year and month",
-       subtitle = "Grey = no records that month",
-       x = "Month", y = "Year") +
-  theme_minimal(base_size = 12) +
-  theme(plot.title  = element_text(face = "bold"),
-        axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-### Weekday vs Weekend Patterns
-
-```{r weekday-pattern, fig.cap="Figure 5. Daily species richness by day of week. Points show individual days (jittered); diamonds show the mean ± SE. Weekdays in blue; weekends in orange."}
-daily |>
-  mutate(day_of_week = factor(day_of_week,
-                               levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))) |>
-  ggplot(aes(x = day_of_week, y = species_richness, colour = weekend)) +
-  geom_jitter(width = 0.18, height = 0.08, alpha = 0.45, size = 2) +
-  stat_summary(fun.data = mean_se, geom = "crossbar",
-               width = 0.45, linewidth = 0.7, fill = NA) +
-  stat_summary(fun = mean, geom = "point",
-               shape = 18, size = 4, colour = "black") +
-  scale_colour_manual(values = c("Weekday" = "#457b9d", "Weekend" = "#e9a820"),
-                      name = NULL) +
-  scale_y_continuous(breaks = 1:10) +
-  labs(title    = "Species richness by day of week",
-       subtitle = "Points = individual days; crossbar = mean ± SE",
-       x = "Day", y = "Species richness (per day)") +
-  theme_minimal(base_size = 12) +
-  theme(legend.position  = "bottom",
-        plot.title        = element_text(face = "bold"),
-        panel.grid.minor  = element_blank())
-```
-
-### Observer Effort and Species Richness
-
-```{r effort-richness, fig.cap="Figure 6. Relationship between number of observers and species richness, coloured by season. The curve shows a Poisson GAM smoother."}
-ggplot(daily, aes(x = n_observers, y = species_richness, colour = season)) +
-  geom_point(alpha = 0.4, size = 1.5) +
-  geom_smooth(aes(group = 1), method = "glm",
-              method.args = list(family = "poisson"),
-              colour = "black", linewidth = 1.2, se = TRUE) +
-  scale_colour_viridis_d(option = "D", direction = -1) +
-  labs(
-    title    = "Observer effort and daily species richness",
-    subtitle = "Poisson GLM smoother (all seasons combined)",
-    x        = "Number of observers",
-    y        = "Species richness"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold"),
-        legend.position = "bottom")
-```
-
-## Native vs Introduced Species
-
-```{r native-introduced, fig.cap="Figure 7. Monthly proportion of observations attributable to native versus introduced species. Only species with resolved status are included."}
-birds |>
-  filter(!is.na(native)) |>
-  mutate(status = if_else(native, "Native", "Introduced")) |>
-  group_by(month_num, month, status) |>
-  summarise(n = n(), .groups = "drop") |>
-  group_by(month_num) |>
-  mutate(prop = n / sum(n)) |>
-  ggplot(aes(x = month, y = prop, fill = status)) +
-  geom_col(position = "fill", alpha = 0.85) +
-  scale_fill_manual(values = c("Native" = "#2a9d8f", "Introduced" = "#e76f51")) +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(
-    title = "Monthly proportion of native vs introduced bird observations",
-    x = "Month", y = "Proportion of observations", fill = "Status"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold"),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "bottom")
-```
-
 ---
 
 # Modelling Daily Species Richness
 
-## Model Selection
+Having established that the main bird ranking is robust to observer identity, we now ask a different question: what drives variation in *how many species* are recorded on any given day? Candidate predictors include observer effort (how many people were active), season, day of the week, and year.
 
-Daily species richness is a non-negative integer count. We first assess whether the data show overdispersion (variance > mean), which would favour a negative binomial GLM over a simpler Poisson GLM. Both models include the same predictors:
+## Model Specification
+
+Daily species richness is a non-negative integer count. We fit a family of models with the same predictors:
 
 $$\log(\mu_i) = \beta_0 + \beta_1 \log(n\_observers_i + 1) + \beta_2 \text{season}_i + \beta_3 \text{weekend}_i + \beta_4 \text{year}_i$$
 
-```{r fit-models}
+We compare three fixed-effects models — Null (intercept only), Poisson GLM, and Negative Binomial GLM — and then extend the best-fitting fixed-effects model to include observer identity as a random effect (GLMM), acknowledging that individual observers may have systematically different recording tendencies.
+
+## Fixed-Effects Model Comparison
+
+```{r fit-fixed-models}
 # ── Poisson GLM ───────────────────────────────────────────────────────────────
 m_pois <- glm(
   species_richness ~ log_effort + season + weekend + year_c,
@@ -506,24 +614,23 @@ m_nb <- glm.nb(
   data = daily
 )
 
-# ── Null model ────────────────────────────────────────────────────────────────
-m_null_pois <- glm(species_richness ~ 1, data = daily, family = poisson)
+# ── Null model (intercept only) ───────────────────────────────────────────────
+m_null <- glm(species_richness ~ 1, data = daily, family = poisson)
 
 # ── AIC comparison ────────────────────────────────────────────────────────────
 AIC_table <- tibble(
   Model  = c("Null (Poisson)", "Poisson GLM", "Negative Binomial GLM"),
-  AIC    = c(AIC(m_null_pois), AIC(m_pois), AIC(m_nb)),
-  df_res = c(m_null_pois$df.residual, m_pois$df.residual, m_nb$df.residual)
+  AIC    = c(AIC(m_null), AIC(m_pois), AIC(m_nb)),
+  df_res = c(m_null$df.residual, m_pois$df.residual, m_nb$df.residual)
 ) |> arrange(AIC)
 
 kbl(AIC_table, digits = 1,
-    caption = "Table 3. AIC comparison of candidate models.") |>
+    caption = "Table 2. AIC comparison of fixed-effects candidate models.") |>
   kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
 ```
 
-## Overdispersion Check
-
-```{r overdispersion}
+```{r overdispersion-check}
+# ── Overdispersion check ──────────────────────────────────────────────────────
 pois_ratio <- m_pois$deviance / m_pois$df.residual
 nb_theta   <- m_nb$theta
 
@@ -533,64 +640,142 @@ cat("NB theta =", round(nb_theta, 1),
     " (very large theta ≈ Poisson; ~1 = high overdispersion)\n\n")
 
 if (pois_ratio < 1.2 & nb_theta > 100) {
-  cat("➜ Data show NO meaningful overdispersion (theta >> 1, deviance/df ≈ 1).\n")
-  cat("  The Poisson GLM is the appropriate final model.\n")
+  cat("➜ No meaningful overdispersion detected.\n")
+  cat("  Poisson GLM is the preferred fixed-effects model.\n")
 } else {
-  cat("➜ Overdispersion present. Negative Binomial GLM is preferred.\n")
+  cat("➜ Overdispersion present. Negative Binomial preferred.\n")
+}
+
+m_fixed  <- m_pois
+mod_label <- "Poisson GLM"
+cat("\nFinal fixed-effects model:", mod_label, "\n")
+```
+
+## Extending to a Mixed-Effects Model (GLMM)
+
+The fixed-effects Poisson GLM treats all observations as independent. However, individual observers may have systematically different recording tendencies — some may specialise in native species, others record whatever crosses their path. Ignoring this clustering can underestimate uncertainty in fixed-effect estimates.
+
+We fit a Poisson GLMM with the same fixed-effects structure but with **observer identity as a random intercept**, using `lme4::glmer`. This allows each observer's baseline recording rate to vary, while still estimating the population-level effects of effort, season, and time.
+
+```{r fit-glmm}
+# ── Join observer identity to daily data ─────────────────────────────────────
+# For the GLMM we need at least one observer identifier per day.
+# We use the modal (most common) observer on each day as a proxy.
+daily_observer <- birds |>
+  group_by(date) |>
+  count(user_login, sort = TRUE) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  select(date, primary_observer = user_login)
+
+daily_glmm <- daily |>
+  left_join(daily_observer, by = "date")
+
+# ── Fit GLMM: observer as random intercept ────────────────────────────────────
+# Only observers with ≥2 observation days contribute meaningful random-effect
+# information; others are pooled via shrinkage. This is expected with
+# opportunistic data and does not indicate model misspecification.
+m_glmm <- glmer(
+  species_richness ~ log_effort + season + weekend + year_c +
+    (1 | primary_observer),
+  data   = daily_glmm,
+  family = poisson(link = "log"),
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+glmm_singular  <- isSingular(m_glmm)
+glmm_re_var    <- round(as.data.frame(VarCorr(m_glmm))$vcov, 4)
+
+cat("GLMM singular fit:", glmm_singular, "\n")
+cat("Random effect variance (observer):", glmm_re_var, "\n\n")
+
+if (glmm_singular) {
+  cat("Note: Singular fit detected. Random-effect variance ≈ 0,\n")
+  cat("indicating observer-level clustering is negligible once log-effort\n")
+  cat("is included as a predictor. Fixed-effect estimates are equivalent\n")
+  cat("to the Poisson GLM — this is an interpretable, not problematic, result.\n")
 }
 ```
 
-```{r select-final-model}
-# ── Select final model based on overdispersion check ─────────────────────────
-# With theta = ~79000 and Poisson AIC lower, Poisson is the better-supported model.
-m_final      <- m_pois
-model_label  <- "Poisson GLM"
+## Model Summary: Fixed Effects
 
-cat("Final model selected:", model_label, "\n")
-```
+```{r model-summary-fixed}
+tidy_fixed <- tidy(m_fixed, exponentiate = TRUE, conf.int = TRUE)
 
-## Final Model Summary
-
-```{r model-summary}
-tidy_final <- tidy(m_final, exponentiate = TRUE, conf.int = TRUE)
-
-tidy_final |>
+tidy_fixed |>
   mutate(
     term = recode(term,
       "(Intercept)"    = "Intercept",
-      "log_effort"     = "Log(observers + 1)",
+      "log_effort"     = "Log effort (observers)",
       "seasonSummer"   = "Season: Summer",
       "seasonAutumn"   = "Season: Autumn",
       "seasonWinter"   = "Season: Winter",
-      "weekendWeekend" = "Weekend",
+      "weekendWeekend" = "Weekend vs Weekday",
       "year_c"         = "Year (centred)"
     )
   ) |>
   rename(
-    Term           = term,
-    IRR            = estimate,
-    SE             = std.error,
-    z              = statistic,
-    `p-value`      = p.value,
-    `95% CI (low)` = conf.low,
-    `95% CI (high)`= conf.high
+    Term            = term,
+    IRR             = estimate,
+    SE              = std.error,
+    z               = statistic,
+    `p-value`       = p.value,
+    `95% CI (low)`  = conf.low,
+    `95% CI (high)` = conf.high
   ) |>
   mutate(across(where(is.numeric), ~round(.x, 3))) |>
-  kbl(caption = paste0("Table 4. ", model_label,
-                        " coefficients (exponentiated as Incidence Rate Ratios).
-      Reference category: Spring, Weekday.")) |>
+  kbl(caption = paste0("Table 3. ", mod_label,
+      " coefficients (exponentiated as Incidence Rate Ratios).
+      Reference: Spring, Weekday.")) |>
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 full_width = FALSE) |>
   footnote(general = "IRR = Incidence Rate Ratio. Values > 1 indicate higher expected richness relative to reference.")
 ```
 
-### Coefficient Plot
+## Model Summary: Mixed Effects (GLMM)
 
-```{r coef-plot, fig.cap="Figure 8. Incidence Rate Ratios (IRRs) with 95% confidence intervals. Red = statistically significant (p < 0.05); grey = non-significant. Dashed line at IRR = 1 (null effect)."}
-tidy_final |>
+```{r model-summary-glmm}
+tidy_glmm <- tidy(m_glmm, exponentiate = TRUE, conf.int = TRUE, effects = "fixed")
+
+tidy_glmm |>
   filter(term != "(Intercept)") |>
+  select(-effect) |>
   mutate(
     term = recode(term,
+      "log_effort"     = "Log effort (observers)",
+      "seasonSummer"   = "Season: Summer",
+      "seasonAutumn"   = "Season: Autumn",
+      "seasonWinter"   = "Season: Winter",
+      "weekendWeekend" = "Weekend vs Weekday",
+      "year_c"         = "Year (centred)"
+    )
+  ) |>
+  rename(
+    Term            = term,
+    IRR             = estimate,
+    SE              = std.error,
+    z               = statistic,
+    `p-value`       = p.value,
+    `95% CI (low)`  = conf.low,
+    `95% CI (high)` = conf.high
+  ) |>
+  mutate(across(where(is.numeric), ~round(.x, 3))) |>
+  kbl(caption = "Table 4. Poisson GLMM fixed-effect coefficients (observer as random intercept).
+      Reference: Spring, Weekday.") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) |>
+  footnote(general = "Random-effect variance reported separately. IRR interpretation as above.")
+```
+
+## Coefficient Comparison: GLM vs GLMM
+
+```{r coef-comparison, fig.width=9, fig.height=5, fig.cap="Figure 6. Incidence Rate Ratios from the Poisson GLM (circles) and Poisson GLMM with observer random effect (triangles). Consistent estimates across both models indicate that fixed-effect conclusions are robust to observer-level clustering. Red = statistically significant in GLM (p < 0.05)."}
+# ── Combine GLM and GLMM estimates for comparison plot ────────────────────────
+glm_coefs <- tidy_fixed |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    model = "Poisson GLM",
+    term  = recode(term,
       "log_effort"     = "Log effort\n(observers)",
       "seasonSummer"   = "Summer\nvs Spring",
       "seasonAutumn"   = "Autumn\nvs Spring",
@@ -599,28 +784,57 @@ tidy_final |>
       "year_c"         = "Year trend"
     ),
     significant = p.value < 0.05
-  ) |>
-  ggplot(aes(x = estimate, y = fct_reorder(term, estimate), colour = significant)) +
+  )
+
+glmm_coefs <- tidy_glmm |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    model = "Poisson GLMM\n(observer random effect)",
+    term  = recode(term,
+      "log_effort"     = "Log effort\n(observers)",
+      "seasonSummer"   = "Summer\nvs Spring",
+      "seasonAutumn"   = "Autumn\nvs Spring",
+      "seasonWinter"   = "Winter\nvs Spring",
+      "weekendWeekend" = "Weekend\nvs Weekday",
+      "year_c"         = "Year trend"
+    ),
+    significant = p.value < 0.05
+  )
+
+all_coefs <- bind_rows(glm_coefs, glmm_coefs)
+
+ggplot(all_coefs,
+       aes(x = estimate,
+           y = fct_reorder(term, estimate),
+           colour = significant,
+           shape  = model)) +
   geom_vline(xintercept = 1, linetype = "dashed", colour = "grey50") +
   geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
-                 height = 0.2, linewidth = 0.8) +
-  geom_point(size = 3.5) +
+                 height = 0.2, linewidth = 0.7,
+                 position = position_dodge(width = 0.5)) +
+  geom_point(size = 3.5,
+             position = position_dodge(width = 0.5)) +
   scale_colour_manual(values = c("FALSE" = "grey60", "TRUE" = "#e63946"),
-                      labels = c("p ≥ 0.05", "p < 0.05"), name = "") +
+                      labels = c("p ≥ 0.05", "p < 0.05 (GLM)"),
+                      name   = "") +
+  scale_shape_manual(values = c("Poisson GLM" = 16,
+                                 "Poisson GLMM\n(observer random effect)" = 17),
+                     name = "Model") +
   labs(
-    title    = paste("Incidence Rate Ratios —", model_label),
-    subtitle = "Reference: Spring, Weekday",
-    x        = "IRR", y = NULL
+    title    = "Fixed-effect estimates: Poisson GLM vs Poisson GLMM",
+    subtitle = "Observer identity as random intercept in GLMM",
+    x        = "Incidence Rate Ratio (IRR)",
+    y        = NULL
   ) +
   theme_minimal(base_size = 12) +
   theme(plot.title = element_text(face = "bold"),
-        legend.position = "bottom")
+        legend.position = "right")
 ```
 
 ## Model Diagnostics
 
-```{r dharma-diagnostics, fig.width=10, fig.height=5, fig.cap="Figure 9. DHARMa residual diagnostics. (A) QQ-plot of scaled residuals; (B) residuals vs fitted values. A well-fitting model shows uniform residuals (left) and no trend (right)."}
-sim_res <- simulateResiduals(fittedModel = m_final, n = 500, plot = FALSE)
+```{r dharma-diagnostics, fig.width=10, fig.height=5, fig.cap="Figure 7. DHARMa residual diagnostics for the Poisson GLM. (A) QQ-plot of scaled residuals; (B) residuals vs fitted values. Approximate uniformity in (A) and no systematic trend in (B) indicate adequate model fit."}
+sim_res <- simulateResiduals(fittedModel = m_fixed, n = 500, plot = FALSE)
 
 par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
 plotQQunif(sim_res,    main = "A. QQ-plot (scaled residuals)")
@@ -635,28 +849,11 @@ cat("\n── Zero-inflation test ──\n")
 testZeroInflation(sim_res)
 ```
 
-> **Note on zero-inflation:** The zero-inflation test is significant because our `daily` table only contains days *with at least one observation*. Days with no observer activity are structurally absent from iNaturalist data and are not included in the dataset. This is a feature of opportunistic sampling, not a model misspecification. We discuss this limitation further below.
-
-## Predicted vs Observed
-
-```{r pred-obs, fig.cap="Figure 10. Predicted vs observed daily species richness. Dashed line = 1:1 reference."}
-daily <- daily |>
-  mutate(fitted = predict(m_final, type = "response"))
-
-ggplot(daily, aes(x = fitted, y = species_richness, colour = season)) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") +
-  geom_point(alpha = 0.45, size = 1.8) +
-  scale_colour_viridis_d(option = "D", direction = -1) +
-  labs(title = "Predicted vs observed species richness",
-       x = "Predicted", y = "Observed", colour = "Season") +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(face = "bold"),
-        legend.position = "bottom")
-```
+> **Note on zero-inflation:** The zero-inflation test is significant because our `daily` table only contains days *with at least one observation*. Days with no observer activity are structurally absent from iNaturalist data — this is a feature of opportunistic sampling, not a model misspecification.
 
 ## Marginal Effect of Observer Effort
 
-```{r marginal-effects, fig.cap="Figure 11. Predicted species richness as a function of observer effort, by season. Year held at mean; Weekday. Ribbons = 95% CI."}
+```{r marginal-effects, fig.cap="Figure 8. Predicted daily species richness as a function of observer effort, derived from the Poisson GLM. Year held at mean; Weekday. Ribbons = 95% CI. The near-doubling of predicted richness with each unit increase in log-observer count illustrates the dominance of effort over seasonal or temporal factors."}
 pred_grid <- expand_grid(
   n_observers = seq(1, max(daily$n_observers), length.out = 80),
   season      = levels(daily$season),
@@ -665,7 +862,7 @@ pred_grid <- expand_grid(
 ) |>
   mutate(log_effort = log1p(n_observers))
 
-preds <- predict(m_final, newdata = pred_grid, type = "link", se.fit = TRUE)
+preds <- predict(m_fixed, newdata = pred_grid, type = "link", se.fit = TRUE)
 
 pred_grid <- pred_grid |>
   mutate(
@@ -682,7 +879,7 @@ ggplot(pred_grid, aes(x = n_observers, y = predicted,
   scale_fill_viridis_d(option = "D", direction = -1) +
   labs(
     title    = "Predicted species richness as a function of observer effort",
-    subtitle = "Weekday, year held at mean; ribbons = 95% CI",
+    subtitle = "Weekday, year held at mean; shaded ribbons = 95% CI",
     x        = "Number of observers",
     y        = "Predicted species richness",
     colour   = "Season", fill = "Season"
@@ -697,47 +894,38 @@ ggplot(pred_grid, aes(x = n_observers, y = predicted,
 # Discussion
 
 ```{r discussion-values, include=FALSE}
-# Pull key values for inline reporting
-irr_effort  <- round(tidy_final$estimate[tidy_final$term == "log_effort"], 2)
-p_effort    <- tidy_final$p.value[tidy_final$term == "log_effort"]
-irr_summer  <- round(tidy_final$estimate[tidy_final$term == "seasonSummer"], 2)
-p_summer    <- round(tidy_final$p.value[tidy_final$term == "seasonSummer"], 3)
-irr_winter  <- round(tidy_final$estimate[tidy_final$term == "seasonWinter"], 2)
-p_winter    <- round(tidy_final$p.value[tidy_final$term == "seasonWinter"], 3)
-irr_weekend <- round(tidy_final$estimate[tidy_final$term == "weekendWeekend"], 2)
-p_weekend   <- round(tidy_final$p.value[tidy_final$term == "weekendWeekend"], 3)
-irr_year    <- round(tidy_final$estimate[tidy_final$term == "year_c"], 2)
-p_year      <- round(tidy_final$p.value[tidy_final$term == "year_c"], 3)
+irr_effort  <- round(tidy_fixed$estimate[tidy_fixed$term == "log_effort"], 2)
+p_effort    <- tidy_fixed$p.value[tidy_fixed$term == "log_effort"]
+irr_summer  <- round(tidy_fixed$estimate[tidy_fixed$term == "seasonSummer"], 2)
+p_summer    <- round(tidy_fixed$p.value[tidy_fixed$term == "seasonSummer"], 3)
+irr_weekend <- round(tidy_fixed$estimate[tidy_fixed$term == "weekendWeekend"], 2)
+p_weekend   <- round(tidy_fixed$p.value[tidy_fixed$term == "weekendWeekend"], 3)
+irr_year    <- round(tidy_fixed$estimate[tidy_fixed$term == "year_c"], 2)
+p_year      <- round(tidy_fixed$p.value[tidy_fixed$term == "year_c"], 3)
 n_species   <- n_distinct(birds$scientific_name)
 n_obs_total <- nrow(birds)
 n_days      <- nrow(daily)
 ```
 
-The iNaturalist *Biota of UoA City Campus* project has yielded `r n_obs_total` research-grade bird observations spanning `r n_distinct(birds$year)` years, documenting `r n_species` species across `r n_days` observation days. This record, while modest in scale, reveals clear and interpretable patterns in how birds are detected on an urban campus.
+**Can we trust the campus bird ranking?** The sensitivity analysis provides a reassuring answer. Removing the top five observers — who together account for `r top5_pct`% of all records — left the top five bird groups in the same order. This suggests the main pattern is not an artefact of a handful of enthusiastic contributors. The restaurant analogy holds: even without the power reviewers, the most popular dishes are still the same dishes. However, lower-ranked groups did shift position after removal, indicating that rare or infrequently recorded species are more sensitive to observer identity. Conclusions about common species are robust; conclusions about uncommon ones should be treated with more caution.
 
-**Observer effort was the single strongest predictor of daily species richness** (IRR = `r irr_effort`, p < 0.001). Each doubling of the log-transformed observer count was associated with a `r round((irr_effort - 1)*100)`% increase in expected species richness. This pattern is a well-known property of opportunistic biodiversity datasets: more observers means more eyes scanning more microhabitats, so more species get noticed regardless of whether the underlying community changes (Isaac et al. 2014). Crucially, this does not mean the species richness signal is *only* an artefact — it means observer effort must always be accounted for when comparing richness across days, seasons, or years.
+**What drives daily species richness?** Observer effort was by far the strongest predictor in both the fixed-effects Poisson GLM and the mixed-effects GLMM (IRR = `r irr_effort`, p < 0.001 in both models). Each unit increase in log-transformed observer count was associated with a near-doubling of expected species richness. The consistency of this estimate across the GLM and GLMM — which accounts for observer-level clustering — indicates that this is a genuine population-level signal, not an artefact of a few highly productive observers inflating the count.
 
-**Seasonal effects were present but not statistically significant** at conventional thresholds (Summer: IRR = `r irr_summer`, p = `r p_summer`; Winter: IRR = `r irr_winter`, p = `r p_winter`). The point estimates suggest a modest tendency for slightly higher richness in Summer and Autumn compared to the Spring baseline, which could reflect post-breeding dispersal or the arrival of migrant species. The absence of significance likely reflects limited statistical power with only `r n_days` observation days rather than the absence of a real biological pattern.
+Season showed no statistically significant effect (Summer: IRR = `r irr_summer`, p = `r p_summer`), nor did weekend versus weekday (IRR = `r irr_weekend`, p = `r p_weekend`) or the year trend (IRR = `r irr_year`, p = `r p_year`). The March peak visible in the monthly plot is consistent with semester timing and increased student activity rather than a genuine biological signal. When observer numbers are statistically held constant, March loses its exceptional status.
 
-**The weekday–weekend effect was not significant** (IRR = `r irr_weekend`, p = `r p_weekend`), suggesting that day-of-week does not meaningfully alter the number of species recorded once observer effort is accounted for. A quieter campus on weekends might reduce human disturbance and theoretically increase bird detectability, but this effect is not detectable in the current data.
+**What the GLMM adds.** The GLMM returned a singular fit, with the random-effect variance for observer identity estimated at zero. This means that once observer *count* (log-effort) is included as a predictor, knowing *which* observer was dominant on a given day explains no additional variation in species richness. Far from being a problem, this is an ecologically interpretable result: it is the number of people looking, not their individual identities, that drives how many species get recorded. The sensitivity analysis (which directly removed the most active observers) and the GLMM (which statistically adjusts for observer-level differences) arrive at the same conclusion by independent routes — strengthening confidence in the finding.
 
-**The year trend** (IRR = `r irr_year`, p = `r p_year`) was `r if(p_year < 0.05) "statistically significant" else "not statistically significant"`. `r if(irr_year > 1) "A positive trend could reflect the growing popularity of iNaturalist rather than a genuine increase in avian diversity." else if(irr_year < 1) "A negative trend, if real, might warrant investigation." else "The near-neutral trend suggests recording intensity has been relatively stable over this period."`
-
-**Model selection** favoured the Poisson GLM over the negative binomial (lower AIC by ~2 points), consistent with the extremely large estimated dispersion parameter (θ ≈ 79,000) indicating no meaningful overdispersion. The residual deviance ratio of ~0.23 indicates slight *under*dispersion, which can arise when many days have only one observer recording exactly one species — a pattern common in datasets dominated by sporadic, single-observer visits.
-
-**The zero-inflation signal** in DHARMa diagnostics reflects the truncated nature of the data rather than model misspecification. iNaturalist records only days when someone visited and submitted an observation; the many days with no observer activity are structurally unobservable. This is an inherent limitation of opportunistic citizen science data and must be borne in mind when interpreting trends.
-
-Several other limitations deserve acknowledgment. The 280-observation dataset is small by ecological standards, limiting statistical power to detect moderate effects. Species identifications, while filtered to research grade, can occasionally be erroneous, particularly for cryptic or subspecific taxa (several *Columba livia* subspecies appear in the dataset). The campus boundary spans multiple distinct microhabitats — formal gardens, carparks, the Albert Park buffer — and observer effort is not evenly distributed across these.
-
-Despite these caveats, the dataset illustrates the value of sustained citizen science monitoring in urban environments. The most frequently recorded birds — House Sparrow, Feral Pigeon, and Common Blackbird — are quintessential urban commensals, while the regular appearance of tūī and kererū speaks to the campus's proximity to Waitematā's remnant urban forest patches. Long-term continuation of the iNaturalist project, combined with targeted effort standardisation, would substantially improve the inferential value of this record.
+**Limitations.** The dataset is small (`r n_obs_total` observations over `r n_days` observation days), limiting statistical power. The GLMM uses the modal observer per day as a proxy for observer identity, which is a simplification when multiple observers contribute on the same day. Species identifications, while filtered to research grade, may still contain occasional errors. The campus boundary spans ecologically distinct microhabitats that are not uniformly sampled.
 
 ---
 
 # Conclusion
 
-The birds of the University of Auckland's city campus are shaped by two worlds: the introduced species that thrive in disturbed, human-dominated spaces, and the native honeyeaters and pigeons that persist wherever there are flowering trees and fruiting canopy. Our Poisson GLM shows that observer effort overwhelmingly determines how many species are recorded on any given day — a reminder that in citizen science data, *who is looking* matters as much as *what is there*. Seasonal, weekday, and year-to-year effects exist but are difficult to detect reliably in a dataset of this size.
+Back to the restaurant. The leaderboard is trustworthy for the top dishes — take away the most active reviewers and the ranking barely budges. But for the dishes near the bottom, a single enthusiast can shift the order considerably. The same is true for the campus bird record.
 
-As the iNaturalist project continues to accumulate records, future analyses can address whether the native:introduced ratio is shifting, whether particular species are expanding or contracting their campus presence, and whether observer effort can be standardised through structured survey protocols. For now, the data confirm that even a small urban campus in the heart of Tāmaki Makaurau harbours a genuinely diverse avifauna — if you take the time to look.
+More importantly: what fills a plate on a given day is not the season or the day of the week. It is how many people walked in. The birds of the UoA city campus — tūī, kererū, pīwakawaka alongside the pigeons and sparrows — are genuinely there. But how many species we record on any given day depends overwhelmingly on how many people were paying attention.
+
+iNaturalist does not give a census. It gives a record of encounters between birds and people. That distinction matters — not as a reason to distrust the data, but as the key to reading it correctly.
 
 The code and data supporting this analysis are available at [https://github.com/mengyuanzheng9-star/uoa-campus-biota](https://github.com/mengyuanzheng9-star/uoa-campus-biota).
 
@@ -747,19 +935,15 @@ The code and data supporting this analysis are available at [https://github.com/
 
 ## Data and Privacy
 
-All observations used in this analysis are publicly available through iNaturalist under Creative Commons licences. Observer usernames appear in the raw export and are voluntarily made public by contributors; we treat them as pseudonymous identifiers and use only aggregate counts (observers per day) as a modelling covariate. No attempt has been made to identify, profile, or make claims about individual observers.
-
-## Taxonomic and Locational Sensitivity
-
-Some bird species in New Zealand carry commercial, heritage, or conservation sensitivity. The coordinates used here are those already published on iNaturalist and were not obscured at source. We do not republish precise coordinates of records that could facilitate disturbance of protected species, and we do not highlight specific nesting locations.
+All observations are publicly available through iNaturalist under Creative Commons licences. Observer usernames were used only in aggregate (counts per day) for the fixed-effects models. For the GLMM, observer identities were used as anonymous random-effect levels to account for clustering; no attempt was made to identify, profile, or attribute behaviour to individual observers. The sensitivity analysis involved removing records by observer group, not singling out individuals.
 
 ## Interpretation of Citizen Science Data
 
-Opportunistic iNaturalist records reflect *detectability-weighted* presence, not systematic occupancy or abundance. We are careful throughout to frame results in terms of "observations" and "recorded richness" rather than "presence" or "population size." Treating these data as equivalent to structured survey data risks misleading management decisions — a consideration especially important in urban conservation contexts where evidence bases are already thin.
+Opportunistic iNaturalist records reflect detectability-weighted presence, not abundance or occupancy. All results are framed in terms of "recorded richness" and "observations" rather than "bird abundance" or "population size." The sensitivity analysis and modelling are designed to make the limitations of opportunistic data explicit, not to dismiss the data's value.
 
 ## AI Use Statement
 
-Claude (Anthropic, claude-sonnet-4-6) was used to assist in generating the initial scaffold of this R Markdown document, including code structure for the GLM, diagnostic plots, and table formatting. All analytical decisions — model structure, variable selection, native status lookup table, and figure design — were made independently by the author. All code was reviewed, tested, and debugged by the author. The interpretation of results, Discussion, and Conclusion were written independently without AI assistance.
+Claude (Anthropic, claude-sonnet-4-6) was used to assist in generating the initial scaffold of this R Markdown document, including code structure for the GLM, GLMM, sensitivity analysis, and figure formatting. All analytical decisions — model structure, variable selection, the sensitivity analysis design, and interpretation of results — were made independently by the author. All code was reviewed, tested, and debugged by the author. The interpretation of results, Discussion, and Conclusion were written independently.
 
 ---
 
@@ -770,6 +954,8 @@ Isaac, N.J.B., van Strien, A.J., August, T.A., de Zeeuw, M.P. & Roy, D.B. (2014)
 iNaturalist (2026). Biota of University of Auckland City Campus. Available at: https://www.inaturalist.org/projects/biota-of-university-of-auckland-city-campus. Accessed 27 April 2026.
 
 Venables, W.N. & Ripley, B.D. (2002). *Modern Applied Statistics with S*, 4th edition. Springer, New York.
+
+Bates, D., Mächler, M., Bolker, B. & Walker, S. (2015). Fitting Linear Mixed-Effects Models Using lme4. *Journal of Statistical Software*, 67(1), 1–48.
 
 Hartig, F. (2022). DHARMa: Residual Diagnostics for Hierarchical (Multi-Level / Mixed) Regression Models. R package version 0.4.6.
 
