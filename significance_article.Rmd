@@ -26,7 +26,7 @@ The ranking is not useless. Those dishes may really be popular. But before trust
 
 The bird records from the University of Auckland City Campus raise a similar question. On iNaturalist, 138 observers recorded 280 bird observations across 29 bird groups. But those records were not evenly shared. The five most active observers contributed 71 records, or 25.4% of the dataset.
 
-So the campus bird list is not just a list of birds. It is also a list shaped by people. It records encounters between birds and observers, not birds alone.
+So the campus bird list is doing two things at once. It tells us which birds were recorded, and it tells us something about who was looking. It records encounters between birds and observers, not birds alone.
 
 ---
 
@@ -46,7 +46,7 @@ Understanding the space between those two patterns is the purpose of this analys
 
 The first view of the data looks like a bird leaderboard.
 
-```{r figure-ranking, fig.cap="**Figure 1.** Most frequently recorded bird groups on the UoA city campus, 2016–2026. Teal bars = native NZ species; salmon bars = introduced species. Tūī, a native honeyeater, appears almost as frequently as the House Sparrow despite being far less numerous on any urban campus.", out.width="92%"}
+```{r figure-ranking, fig.cap="**Figure 1.** Most frequently recorded bird groups on the UoA city campus, 2016–2026. Teal bars = native NZ species; salmon bars = introduced species. Tūī, a native honeyeater, appears almost as frequently as House Sparrow, even though the two species are unlikely to be equally abundant on a busy urban campus.", out.width="92%"}
 knitr::include_graphics("figure_ranking.png")
 ```
 
@@ -96,7 +96,7 @@ Lower down the ranking, however, the list became less steady. Nine groups change
 
 That pattern makes sense, but not because the birds themselves changed. It is a property of small numbers. Near the bottom of the leaderboard, many groups are separated by only one or two records, so removing a handful of observations can change the order.
 
-Australian Magpie moved up after the five most active observers were removed, probably because the groups around it lost proportionally more records from those observers. NZ Fantail and Kererū moved down, which suggests the opposite: their rankings may have depended more on records from highly active contributors. Both are native and distinctive enough to attract attention from regular or bird-interested observers, so their movement is a useful reminder that charismatic species can be especially sensitive to who is looking.
+Australian Magpie moved up after the five most active observers were removed, probably because the groups around it lost proportionally more records from those observers. NZ Fantail and Kererū moved down, suggesting that their rankings were more dependent on records from highly active contributors. The movements are small, but they are useful. They show where the leaderboard is thinnest: not at the top, where many people recorded the same familiar birds, but near the bottom, where one active observer can still shift the story.
 
 Common birds accumulate records from many independent observers, so no single contributor can easily dominate their count. Less frequently recorded species sit on a thinner evidence base. Their apparent ranking is therefore more sensitive to who was doing the recording.
 
@@ -124,13 +124,13 @@ It did not add much. Once total observer effort was included, observer identity 
 
 March offers a useful example. In the raw monthly totals, March looked like the busiest recording month. It is also the start of the academic semester, when more students are on campus and course-related activities may prompt iNaturalist uploads. After accounting for observer numbers, the March peak looked much less like a strong ecological signal and much more like a human calendar effect.
 
-With a larger dataset, this would be a good place to test seasonal ecology more directly. One could compare effort-corrected richness across months, or model particular species whose flowering, breeding, or movement patterns are expected to vary through the year. In this dataset, however, there were only 136 observation days. That is not enough to cleanly separate a subtle seasonal signal from the much louder noise of observer effort.
+With a larger dataset, this would be a good place to test seasonal ecology more directly. One could compare effort-corrected richness across months, or model particular species whose flowering, breeding, or movement patterns are expected to vary through the year. In this dataset, however, there were only 136 observation days. That is not enough to cleanly separate a subtle seasonal signal from the much stronger signal of observer effort.
 
 The main message is simple: more eyes produced more species records.
 
 ---
 
-## What the list can and cannot say
+## Not a census, but not useless
 
 All this attention to observer effort should not make the bird records feel less valuable. The list is not a perfect census, but it still contains real ecological information.
 
@@ -168,4 +168,4 @@ All observations used in this analysis are publicly available through iNaturalis
 
 The analysis also avoids reporting exact observer routes or precise locations for less commonly recorded species. Results are presented at the level of campus-wide patterns rather than individual people or sensitive locations. Throughout the article, I describe the data as recorded observations rather than true abundance or confirmed absence, because opportunistic citizen science records cannot support those stronger claims on their own.
 
-*AI use statement: Claude (Anthropic, claude-sonnet-4-6) assisted in generating the initial scaffold of the R Markdown analysis code, including structure for the GLM, GLMM, sensitivity analysis, and figure formatting. All analytical decisions, model structure, variable selection, and interpretation of results were made independently by the author. All code was reviewed, tested, and run by the author. This article was drafted independently, with AI assistance used only for a structural draft that the author then substantially rewrote and verified.*
+*AI use statement: Claude (Anthropic, Claude Sonnet 4.6) assisted with the initial scaffold of the R Markdown analysis code, including structure for the GLM, GLMM, sensitivity analysis, and figure formatting. ChatGPT (OpenAI) was used to discuss the article structure, refine wording for a non-specialist audience, check alignment with the marking rubric, and identify places where statistical claims needed more cautious interpretation. All analytical decisions, model structure, variable selection, code testing, interpretation of results, and final wording were reviewed and decided by the author. All code was run and checked by the author before submission.*
