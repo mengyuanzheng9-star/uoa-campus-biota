@@ -8,26 +8,27 @@ This repository accompanies a Significance-style article examining what iNatural
 
 The final submitted article is:
 
-- `significance_article.html`
+- `significance_article_magazine.html` — a self-contained, magazine-style article (all figures are embedded, so it displays correctly on its own)
 
 The full analysis code is:
 
 - `birds_we_notice.Rmd`
 
-The analysis file imports the raw iNaturalist data, cleans the bird records, performs the observer-effort analysis, fits the GLM and GLMM models, and generates the three PNG figures used in the article.
+The analysis file imports the raw iNaturalist data, cleans the bird records, performs the observer-effort analysis, fits the GLM and GLMM models, and produces the figures used in the article.
 
-Please download or clone the full repository rather than individual files, because the R Markdown files rely on the raw CSV and figure files stored in this repository.
+Please download or clone the full repository rather than individual files, because `birds_we_notice.Rmd` relies on the raw CSV stored in this repository.
 
 ## Repository contents
 
 - `birds_we_notice.Rmd` — main analysis file: data wrangling, exploratory visualisation, sensitivity analysis, Poisson GLM, Poisson GLMM, diagnostics, and figure generation
 - `birds_we_notice.html` — rendered output of the analysis
-- `significance_article.Rmd` — Significance-style article source file
-- `significance_article.html` — rendered article for submission
+- `significance_article_magazine.html` — final Significance-style article for submission (figures embedded; opens correctly as a standalone file)
 - `observations-719197.csv` — raw iNaturalist export, research-grade Aves records, exported 27 April 2026
-- `figure_ranking.png` — most frequently recorded bird groups, used in the article
-- `figure_observers.png` — distribution of records across observers, used in the article
-- `figure_sensitivity.png` — sensitivity analysis bump chart, used in the article
+- `figure/` — the three figures used in the article:
+  - `figure/figure_ranking.png` — most frequently recorded bird groups
+  - `figure/figure_observers.png` — distribution of records across observers
+  - `figure/figure_sensitivity.png` — sensitivity analysis bump chart
+  - `figure/cover.png` — header image used in the article
 - `uoa-campus-biota.Rproj` — RStudio project file for setting the working directory correctly
 
 ## How to reproduce the analysis
@@ -45,13 +46,7 @@ install.packages(c(
 ))
 ```
 
-4. Knit `birds_we_notice.Rmd` to regenerate the analysis output and the three article figures:
-
-   * `figure_ranking.png`
-   * `figure_observers.png`
-   * `figure_sensitivity.png`
-
-5. Knit `significance_article.Rmd` to render the final Significance-style article.
+4. Knit `birds_we_notice.Rmd` to reproduce the full analysis, including all figures and model output.
 
 The raw data file `observations-719197.csv` must remain in the main repository folder. All file paths are relative to the RStudio project folder.
 
