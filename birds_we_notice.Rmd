@@ -436,10 +436,9 @@ observer_counts |>
 
 ## Sensitivity Analysis: Does the Ranking Hold Without the Top Five?
 
-```{r sensitivity-analysis, fig.width=9, fig.height=7, fig.cap="Figure 3. Bird group ranking with all records (left) versus after removing the top five most active observers (right). Lines connect the same group across both rankings; groups that changed rank are highlighted in orange."}
+```{r sensitivity-analysis, fig.width=11, fig.height=8, fig.cap="Figure 3. Bird group ranking with all records (left) versus after removing the top five most active observers (right). Lines connect the same group across both rankings; groups that changed rank are highlighted in orange, with rank numbers shown at each end. The top five groups held their positions exactly."}
 # ── Recompute ranking after removing top-5 observers ─────────────────────────
 birds_no_top5 <- birds |> filter(!user_login %in% top5_users)
-
 ranking_no_top5 <- birds_no_top5 |>
   count(bird_group, sort = TRUE) |>
   mutate(rank_no_top5 = row_number()) |>
@@ -463,7 +462,6 @@ rank_comparison |>
   print()
 
 # ── Bump chart ────────────────────────────────────────────────────────────────
-# Prepare long format for plotting
 rank_long <- rank_comparison |>
   select(bird_group, rank_all, rank_no_top5, rank_changed, status) |>
   pivot_longer(cols = c(rank_all, rank_no_top5),
@@ -483,31 +481,74 @@ top15_groups <- rank_comparison |>
 
 rank_long_top15 <- rank_long |> filter(bird_group %in% top15_groups)
 
+# ── Rank label data for left and right endpoints ──────────────────────────────
+rank_labels_left <- rank_long_top15 |>
+  filter(dataset == "All records") |>
+  mutate(label = as.character(rank))
+
+rank_labels_right <- rank_long_top15 |>
+  filter(dataset == "Top-5 removed") |>
+  mutate(label = as.character(rank))
+
 ggplot(rank_long_top15,
        aes(x = dataset, y = rank, group = bird_group,
-           colour = rank_changed, label = bird_group)) +
-  geom_line(linewidth = 1.1, alpha = 0.8) +
-  geom_point(size = 3) +
+           colour = rank_changed)) +
+  # ── Grey stable lines first (background) ─────────────────────────────────
+  geom_line(data = rank_long_top15 |> filter(!rank_changed),
+            linewidth = 0.6, alpha = 0.35) +
+  geom_point(data = rank_long_top15 |> filter(!rank_changed),
+             size = 2, alpha = 0.4) +
+  # ── Orange changed lines on top (foreground) ─────────────────────────────
+  geom_line(data = rank_long_top15 |> filter(rank_changed),
+            linewidth = 2.0, alpha = 0.95) +
+  geom_point(data = rank_long_top15 |> filter(rank_changed),
+             size = 3.5, alpha = 1) +
+  # ── Bird group name labels ────────────────────────────────────────────────
   geom_text(data = rank_long_top15 |> filter(dataset == "All records"),
-            aes(x = "All records"), hjust = 1.1, size = 3, fontface = "italic") +
+            aes(label = bird_group),
+            hjust = 1.08, size = 2.8,
+            fontface = if_else(
+              rank_long_top15 |>
+                filter(dataset == "All records") |>
+                pull(rank_changed),
+              "bold.italic", "italic"
+            )) +
   geom_text(data = rank_long_top15 |> filter(dataset == "Top-5 removed"),
-            aes(x = "Top-5 removed"), hjust = -0.1, size = 3, fontface = "italic") +
+            aes(label = bird_group),
+            hjust = -0.08, size = 2.8,
+            fontface = if_else(
+              rank_long_top15 |>
+                filter(dataset == "Top-5 removed") |>
+                pull(rank_changed),
+              "bold.italic", "italic"
+            )) +
+  # ── Annotation: stable top 5 ─────────────────────────────────────────────
+  annotate("rect", xmin = 0.52, xmax = 1.48,
+           ymin = 0.5, ymax = 5.5,
+           alpha = 0.06, fill = "#2a9d8f", colour = "#2a9d8f",
+           linewidth = 0.4, linetype = "dashed") +
+  annotate("text", x = 1, y = 0.2,
+           label = "Top 5 unchanged",
+           colour = "#2a9d8f", size = 3, fontface = "bold") +
   scale_y_reverse(breaks = 1:15) +
-  scale_colour_manual(values = c("FALSE" = "grey60", "TRUE" = "#e9a820"),
+  scale_colour_manual(values = c("FALSE" = "grey70", "TRUE" = "#e9a820"),
                       labels = c("Rank unchanged", "Rank changed"),
                       name   = "") +
-  expand_limits(x = c(0.5, 2.5)) +
+  expand_limits(x = c(-0.2, 2.8)) +
   labs(
-    title    = "Sensitivity analysis: bird group ranking before and after removing top-5 observers",
+    title    = "Sensitivity analysis: does removing the top five observers change the ranking?",
     subtitle = "Top 15 groups shown. Orange = rank changed; grey = rank stable.",
     x        = NULL,
     y        = "Rank (1 = most recorded)"
   ) +
   theme_minimal(base_size = 12) +
   theme(
-    plot.title       = element_text(face = "bold"),
+    plot.title       = element_text(face = "bold", size = 13),
+    plot.subtitle    = element_text(size = 10, colour = "grey40"),
     legend.position  = "bottom",
-    panel.grid.minor = element_blank()
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.text.x      = element_text(size = 12, face = "bold")
   )
 ```
 
