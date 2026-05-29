@@ -875,6 +875,7 @@ ggplot(all_coefs,
 ## Model Diagnostics
 
 ```{r dharma-diagnostics, fig.width=10, fig.height=5, fig.cap="Figure 7. DHARMa residual diagnostics for the Poisson GLM. (A) QQ-plot of scaled residuals; (B) residuals vs fitted values. Approximate uniformity in (A) and no systematic trend in (B) indicate adequate model fit."}
+set.seed(738)
 sim_res <- simulateResiduals(fittedModel = m_fixed, n = 500, plot = FALSE)
 
 par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
