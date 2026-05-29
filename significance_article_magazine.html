@@ -233,7 +233,7 @@
 
     <p>That should make us pause. Anyone who has spent time on an urban campus knows that House Sparrows are everywhere: under café tables, near benches, around bins, and in the small gaps between buildings. Tūī are present too, especially near flowering trees, but they do not feel equally numerous.</p>
 
-    <p>So why does the leaderboard bring them so close together? 
+    <p>So why does the leaderboard bring them so close together?</p> 
     
     <p>One answer is attention. Tūī are large, vocal, native, and distinctive. When one appears, people notice. A House Sparrow is so familiar that it can fade into the background. This does not make the tūī records wrong. It means the ranking reflects more than bird abundance. It also reflects what people find worth recording.</p>
 
@@ -282,22 +282,24 @@
     <p>Common birds accumulate records from many independent observers, so no single contributor can easily dominate their count. Less frequently recorded species sit on a thinner evidence base. Their apparent ranking is therefore more sensitive to who was doing the recording.</p>
 
     <h2>Counting birds, or counting attention?</h2>
-
+    
     <p>The sensitivity analysis tells us that the top of the bird leaderboard is fairly stable. But it raises a second question that the ranking alone cannot answer. On days when observers recorded seven bird groups rather than one, was that because more birds were present, or because more people were looking?</p>
-
-    <p>This distinction matters. If daily species richness mostly follows observer effort, then apparent patterns over months or years could be shaped by the human calendar rather than by bird ecology. A busy month on iNaturalist might mean a busy month for birds, but it might also mean a busy month for people with phones.</p>
-
-    <p>To separate these possibilities, I modelled daily bird-group richness as a count outcome. The model asked whether days with more active observers still produced longer bird lists after accounting for season, weekday or weekend, and year. Because the response was a count, a Poisson model was a sensible starting point. I also checked a negative binomial version, but it did not improve the fit enough to justify the extra complexity: AIC favoured the simpler Poisson model, and the diagnostics did not suggest a need for the additional dispersion parameter.</p>
-
-    <p>The result was plain. Days with more active observers recorded more bird groups. Season, weekend status, and year were much less informative once observer effort was included. In practical terms, moving from a single-observer day to a day with several active observers could roughly double the expected number of bird groups recorded. This does not mean that the campus bird community truly doubled. It means that more people looking produced a richer list.<p> 
+    
+    <p>Before modelling that question, there is a mechanical fact to face. A longer search usually finds a longer list. When the bird records were arranged as a species accumulation curve, the line was still climbing rather than flattening out. In other words, the campus bird list had not reached a clear plateau. More recording days were still adding more bird groups.</p>
+    
+    <p>That matters because it changes how we should read the next result. If recorded richness rises with effort by construction, then “more observers recorded more bird groups” is not, by itself, a surprising ecological discovery. It is the baseline we should expect from any opportunistic recording system. The real question is whether this effort signal is strong enough to dominate other explanations, such as season, weekday or weekend, and year.</p>
+    
+    <p>To test that, I modelled daily bird-group richness as a count outcome. In plainer terms, the model asked: after allowing for the number of people recording birds on a given day, was there still much left for season, day type, or year to explain? Because the response was a count, I used a simple count model as the main analysis and checked a more flexible version as a safeguard. The simpler model was enough: the extra flexibility did not change the story in a useful way.</p>
+    
+    <p>The result was plain. Days with more active observers produced longer bird lists. Season, weekend status, and year were much less informative once observer effort was included. In practical terms, a day with several active observers could record roughly twice as many bird groups as a single-observer day. This does not mean that the campus bird community doubled. It means that more people looking produced a richer record.</p>
     
     <p>It is like searching a park for dropped coins. If one person searches for half an hour, they may find a few. If five people search the same park for the same amount of time, the pile of coins is likely to be larger. The ground did not produce more coins. More searchers simply found more of what was already there.</p>
-
-    <p>I also asked whether it mattered <em>who</em> was looking, not just how many people were looking. A mixed-effects model included observer identity as an additional source of variation. It did not add much. Once total observer effort was included, observer identity contributed little to the model. In this dataset, the total amount of looking was more informative than the identity of the person looking.</p>
-
-    <p>March offers a useful example. In the raw monthly totals, March looked like the busiest recording month. It is also the start of the academic semester, when more students are on campus and course-related activities may prompt iNaturalist uploads. After accounting for observer numbers, the March peak looked much less like a strong ecological signal and much more like a human calendar effect. With a larger dataset, this would be a good place to test seasonal ecology more directly: one could compare effort-corrected richness across months, or model particular species whose flowering, breeding, or movement patterns are expected to vary through the year. In this dataset, however, there were only 136 observation days. That is not enough to cleanly separate a subtle seasonal signal from the much stronger signal of observer effort.</p>
-
-    <p>The main message is simple: more eyes produced more species records.</p>
+    
+    <p>I also checked whether the result depended strongly on <em>who</em> was looking, not just how many people were looking. This check was deliberately cautious, because the dataset records many days with only one or a few observers. A mixed-effects model gave the same broad direction as the simpler analysis, but I treat it as supporting evidence rather than the centre of the argument.</p>
+    
+    <p>March offers a useful example. In the raw monthly totals, March looked like the busiest recording month. It is also the start of the academic semester, when more students are on campus and course-related activities may prompt iNaturalist uploads. Once observer numbers are taken seriously, the March peak looks less like a clean ecological signal and more like a human calendar effect. With a larger dataset, this would be a good place to test seasonal ecology more directly. In this dataset, however, there were only 136 observation days. That is not enough to cleanly separate a subtle seasonal signal from the much stronger signal of observer effort.</p>
+    
+    <p>The main message is simple: the data begin when someone notices.</p>
 
     <h2>Not a census, but not useless</h2>
 
@@ -325,7 +327,7 @@
 
     <div class="footnote-section">
       <h3>About the data and analysis</h3>
-      <p>Observation data were exported from the iNaturalist project <em>Biota of University of Auckland City Campus</em> on 27 April 2026, filtered to research-grade Aves records. Species and subspecies were grouped into broader bird groups for clarity. Statistical analysis was conducted in R: a Poisson GLM and Poisson GLMM (lme4) were fitted with log-transformed observer count, season, day type, and year as predictors of daily species richness; model selection used AIC and dispersion diagnostics (DHARMa). A sensitivity analysis tested ranking stability after removing the five most active observers by total record count. Full annotated code is available at: <a href="https://github.com/mengyuanzheng9-star/uoa-campus-biota">github.com/mengyuanzheng9-star/uoa-campus-biota</a></p>
+      <p>Observation data were exported from the iNaturalist project <em>Biota of University of Auckland City Campus</em> on 27 April 2026, filtered to research-grade Aves records. Species and subspecies were grouped into broader bird groups for clarity. The analysis was conducted in R. I first used descriptive summaries and a species accumulation curve to show how recorded richness changed with sampling effort. I then modelled daily bird-group richness using observer count, season, day type, and year as predictors. A simple count model was used as the main model, with a more flexible count model and a mixed-effects version used as checks. These checks did not change the main conclusion: observer effort was the strongest signal in the dataset. A sensitivity analysis also tested whether the bird-group ranking changed after removing the five most active observers by total record count. Full annotated code is available at: <a href="https://github.com/mengyuanzheng9-star/uoa-campus-biota">github.com/mengyuanzheng9-star/uoa-campus-biota</a></p>
     </div>
 
     <div class="footnote-section">

@@ -78,6 +78,7 @@ library(ggridges)
 library(viridis)
 library(knitr)
 library(kableExtra)
+library(vegan)        # species accumulation / rarefaction
 ```
 
 ```{r native-lookup}
@@ -640,6 +641,37 @@ $$\log(\mu_i) = \beta_0 + \beta_1 \log(n\_observers_i + 1) + \beta_2 \text{seaso
 We compare three fixed-effects models — Null (intercept only), Poisson GLM, and Negative Binomial GLM — and then extend the best-fitting fixed-effects model to include observer identity as a random effect (GLMM), acknowledging that individual observers may have systematically different recording tendencies.
 
 ## Fixed-Effects Model Comparison
+
+```{r species-accumulation-curve}
+# ── Species accumulation curve: the mechanical baseline ───────────────────────
+# Recorded richness is, by construction, a function of how much sampling occurred.
+# Before interpreting the effort effect ecologically, we make this baseline explicit.
+comm <- birds |>
+  count(date, bird_group) |>
+  pivot_wider(names_from = bird_group, values_from = n, values_fill = 0) |>
+  column_to_rownames("date")
+
+set.seed(738)
+accum <- specaccum(comm, method = "random", permutations = 200)
+
+accum_df <- tibble(
+  effort   = accum$sites,
+  richness = accum$richness,
+  sd       = accum$sd
+)
+
+ggplot(accum_df, aes(effort, richness)) +
+  geom_ribbon(aes(ymin = richness - 1.96 * sd, ymax = richness + 1.96 * sd),
+              alpha = 0.15) +
+  geom_line(linewidth = 1) +
+  labs(
+    x = "Sampling effort (number of recording days)",
+    y = "Expected cumulative bird groups",
+    title = "Species accumulation curve",
+    subtitle = "Recorded richness rises with effort and has not yet plateaued"
+  ) +
+  theme_minimal(base_size = 12)
+```
 
 ```{r fit-fixed-models}
 # ── Poisson GLM ───────────────────────────────────────────────────────────────

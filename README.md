@@ -42,7 +42,7 @@ install.packages(c(
   "tidyverse", "lubridate", "janitor",
   "MASS", "lme4", "broom", "broom.mixed", "DHARMa",
   "patchwork", "ggridges", "viridis",
-  "knitr", "kableExtra"
+  "knitr", "kableExtra","vegan"
 ))
 ```
 
